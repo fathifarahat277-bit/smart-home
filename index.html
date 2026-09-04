@@ -4,6 +4,9 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Fathi's Command Center</title>
+    <!-- Ini baris pemanggil logo transparan barumu -->
+    <link rel="icon" type="image/png" href="fathi_logo_transparan.png">
+    
     <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@500;700;900&family=Rajdhani:wght@400;600;700&display=swap" rel="stylesheet">
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/paho-mqtt/1.0.1/mqttws31.min.js"></script>
@@ -650,12 +653,12 @@
         }
 
        // Ganti port ke jalur aman WSS (biasanya port 8884 atau 8883 untuk HiveMQ WebSocket secure)
-const mqttServer = "broker.hivemq.com";
-const mqttPort = 8884; // Port Secure WebSocket
-const clientId = "WebClient_" + Math.random().toString(16).substr(2, 8);
+        const mqttServer = "broker.hivemq.com";
+        const mqttPort = 8884; // Port Secure WebSocket
+        const clientId = "WebClient_" + Math.random().toString(16).substr(2, 8);
 
-// Tambahkan opsi useSSL: true agar diizinkan oleh browser ber-HTTPS
-const client = new Paho.MQTT.Client(mqttServer, mqttPort, clientId);
+        // Tambahkan opsi useSSL: true agar diizinkan oleh browser ber-HTTPS
+        const client = new Paho.MQTT.Client(mqttServer, mqttPort, clientId);
 
         client.onConnectionLost = function(responseObject) {
             document.getElementById('status').innerHTML = "MQTT: DISCONNECTED 🔴";
