@@ -121,21 +121,24 @@
         }
 
         /* --- ILUSTRASI KAMAR (HERO IMAGE) --- */
-        .hero-image {
+.hero-image {
     width: 100%;
     height: 220px;
     border-radius: 20px;
-    background: linear-gradient(to bottom, rgba(11,12,16,0) 40%, rgba(11,12,16,1) 100%),
+    /* Menggabungkan gradien dan gambar dalam satu perintah */
+    background: linear-gradient(to bottom, rgba(11,12,16,0) 30%, rgba(11,12,16,1) 100%),
                 url('https://i.pinimg.com/736x/ed/0e/2c/ed0e2c91c48b75aaf04aa79e98d9d301.jpg');
-    background-size: 100% 100%, cover; /* Memisahkan ukuran gradien (100%) dan gambar (cover) */
+    background-size: cover;
     background-position: center;
-    background-repeat: no-repeat; /* Mencegah pinggiran gambar berulang */
+    background-repeat: no-repeat;
     margin-bottom: 25px;
     border: 1px solid var(--glass-border);
     box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
     position: relative;
-    overflow: hidden; /* Memotong gambar yang bocor keluar dari border-radius */
-        }
+    overflow: hidden;
+    /* Trik ampuh untuk mencegah gambar bocor dari sudut melengkung */
+    transform: translateZ(0);
+}
         .hero-text {
             position: absolute;
             bottom: 20px;
