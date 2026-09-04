@@ -1,0 +1,896 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Fathi's Command Center</title>
+    <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@500;700;900&family=Rajdhani:wght@400;600;700&display=swap" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/paho-mqtt/1.0.1/mqttws31.min.js"></script>
+
+    <style>
+        :root {
+            --glass-bg: rgba(255, 255, 255, 0.03);
+            --glass-border: rgba(255, 255, 255, 0.1);
+            --cyan: #00f3ff;
+            --purple: #bc13fe;
+            --text-main: #e0e6ed;
+            --text-muted: #8a9ba8;
+            --danger: #ff4757;
+            --warning: #ffa502;
+        }
+
+        body, html {
+            margin: 0;
+            padding: 0;
+            color: var(--text-main);
+            font-family: 'Rajdhani', sans-serif;
+            overflow-x: hidden;
+        }
+
+        /* Latar Belakang Animasi Partikel */
+        .particles-container {
+            position: fixed;
+            top: 0; left: 0; width: 100vw; height: 100vh;
+            z-index: -1;
+            background: radial-gradient(circle at top center, #1a1025 0%, #0b0c10 100%);
+            overflow: hidden;
+        }
+
+        .particle {
+            position: absolute;
+            bottom: -20px;
+            width: 4px; height: 4px;
+            background-color: var(--cyan);
+            border-radius: 50%;
+            box-shadow: 0 0 12px 2px var(--cyan);
+            animation: floatUp linear infinite;
+            opacity: 0;
+        }
+        .particle:nth-child(even) {
+            background-color: var(--purple);
+            box-shadow: 0 0 12px 2px var(--purple);
+        }
+
+        @keyframes floatUp {
+            0% { transform: translateY(0) scale(0.8); opacity: 0; }
+            20% { opacity: 0.8; }
+            80% { opacity: 0.8; }
+            100% { transform: translateY(-100vh) scale(1.2); opacity: 0; }
+        }
+
+        /* Layout Utama */
+        .app-container {
+            max-width: 480px;
+            margin: 0 auto;
+            padding: 20px;
+            box-sizing: border-box;
+        }
+
+        /* Header & Jam Digital */
+        header {
+            text-align: center;
+            margin-bottom: 25px;
+            margin-top: 10px;
+        }
+        h1 {
+            font-family: 'Orbitron', sans-serif;
+            font-size: 1.2rem;
+            color: var(--text-muted);
+            letter-spacing: 4px;
+            margin: 0 0 15px 0;
+        }
+        .clock-wrapper {
+            background: var(--glass-bg);
+            border: 1px solid var(--cyan);
+            border-radius: 15px;
+            padding: 15px;
+            box-shadow: 0 0 20px rgba(0, 243, 255, 0.1), inset 0 0 10px rgba(0, 243, 255, 0.05);
+            display: inline-block;
+            min-width: 250px;
+        }
+        .time-box {
+            font-family: 'Orbitron', sans-serif;
+            display: flex;
+            justify-content: center;
+            align-items: baseline;
+        }
+        .time {
+            font-size: 3.5rem;
+            font-weight: 900;
+            color: var(--cyan);
+            text-shadow: 0 0 15px var(--cyan);
+            line-height: 1;
+        }
+        .seconds {
+            font-size: 1.5rem;
+            font-weight: 700;
+            color: var(--purple);
+            text-shadow: 0 0 10px var(--purple);
+            margin-left: 5px;
+        }
+        .date {
+            margin-top: 8px;
+            font-size: 0.9rem;
+            color: var(--text-muted);
+            letter-spacing: 2px;
+            text-transform: uppercase;
+        }
+
+        /* --- ILUSTRASI KAMAR (HERO IMAGE) --- */
+        .hero-image {
+            width: 100%;
+            height: 220px;
+            border-radius: 20px;
+            background: linear-gradient(to bottom, rgba(11,12,16,0) 50%, rgba(11,12,16,1) 100%),
+                        url('https://i.pinimg.com/736x/ed/0e/2c/ed0e2c91c48b75aaf04aa79e98d9d301.jpg');
+            background-size: cover;
+            background-position: center;
+            margin-bottom: 25px;
+            border: 1px solid var(--glass-border);
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+            position: relative;
+        }
+        .hero-text {
+            position: absolute;
+            bottom: 20px;
+            left: 20px;
+            font-family: 'Orbitron', sans-serif;
+            font-size: 1.3rem;
+            font-weight: 700;
+            color: #fff;
+            text-shadow: 0 2px 10px #000;
+        }
+
+        /* Kartu Glassmorphism Umum */
+        .glass-card {
+            background: var(--glass-bg);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            border: 1px solid var(--glass-border);
+            border-radius: 20px;
+            padding: 20px;
+            margin-bottom: 20px;
+            box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
+        }
+
+        /* Sensor Rings */
+        .sensor-container {
+            display: flex;
+            justify-content: space-around;
+            align-items: center;
+        }
+        .ring-box { text-align: center; }
+        .ring {
+            width: 90px; height: 90px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.3rem;
+            font-weight: 700;
+            font-family: 'Orbitron', sans-serif;
+            margin-bottom: 10px;
+            border: 4px solid #222;
+        }
+        .ring.temp {
+            color: var(--cyan);
+            border-top-color: var(--cyan);
+            border-right-color: var(--cyan);
+            box-shadow: 0 0 15px rgba(0, 243, 255, 0.2), inset 0 0 15px rgba(0, 243, 255, 0.2);
+        }
+        .ring.hum {
+            color: var(--purple);
+            border-top-color: var(--purple);
+            border-left-color: var(--purple);
+            box-shadow: 0 0 15px rgba(188, 19, 254, 0.2), inset 0 0 15px rgba(188, 19, 254, 0.2);
+        }
+        .ring-label {
+            color: var(--text-muted);
+            font-size: 0.85rem;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        /* Grafik Suhu */
+        .chart-container {
+            width: 100%;
+            height: 180px;
+        }
+
+        /* Kontrol Relay */
+        .control-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 15px;
+        }
+        .relay-card {
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            padding: 15px;
+            border-radius: 15px;
+        }
+        .relay-icon { font-size: 1.5rem; margin-bottom: 10px; }
+        .relay-name { font-size: 1.1rem; font-weight: 600; margin-bottom: 15px; }
+
+        /* --- MASTER CONTROL BUTTONS --- */
+        .master-controls {
+            display: flex;
+            gap: 15px;
+            margin-bottom: 20px;
+        }
+        .master-btn {
+            flex: 1;
+            padding: 12px 5px;
+            background: rgba(20, 22, 30, 0.7);
+            border: 1px solid var(--glass-border);
+            border-radius: 12px;
+            color: var(--text-main);
+            font-family: 'Orbitron', sans-serif;
+            font-weight: 700;
+            font-size: 0.75rem;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            white-space: nowrap;
+        }
+        
+        .master-btn.btn-off {
+            border-color: rgba(255, 71, 87, 0.4);
+            box-shadow: 0 0 10px rgba(255, 71, 87, 0.05);
+        }
+        .master-btn.btn-off:hover, .master-btn.btn-off:active {
+            background: rgba(255, 71, 87, 0.15);
+            border-color: #ff4757;
+            box-shadow: 0 0 15px rgba(255, 71, 87, 0.6), inset 0 0 10px rgba(255, 71, 87, 0.2);
+            color: #ff4757;
+            transform: scale(0.96);
+        }
+
+        .master-btn.btn-on {
+            border-color: rgba(0, 243, 255, 0.4);
+            box-shadow: 0 0 10px rgba(0, 243, 255, 0.05);
+        }
+        .master-btn.btn-on:hover, .master-btn.btn-on:active {
+            background: rgba(0, 243, 255, 0.15);
+            border-color: var(--cyan);
+            box-shadow: 0 0 15px rgba(0, 243, 255, 0.6), inset 0 0 10px rgba(0, 243, 255, 0.2);
+            color: var(--cyan);
+            transform: scale(0.96);
+        }
+
+        .master-btn.btn-warning {
+            border-color: rgba(255, 165, 2, 0.4);
+            box-shadow: 0 0 10px rgba(255, 165, 2, 0.05);
+            color: var(--warning);
+        }
+        .master-btn.btn-warning:hover, .master-btn.btn-warning:active {
+            background: rgba(255, 165, 2, 0.15);
+            border-color: var(--warning);
+            box-shadow: 0 0 15px rgba(255, 165, 2, 0.6), inset 0 0 10px rgba(255, 165, 2, 0.2);
+            transform: scale(0.96);
+        }
+
+        /* Toggle Switch Cyberpunk */
+        .switch {
+            position: relative;
+            display: inline-block;
+            width: 50px; height: 26px;
+        }
+        .switch input { opacity: 0; width: 0; height: 0; }
+        .slider {
+            position: absolute; cursor: pointer;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background-color: #2a2d34; transition: .4s;
+            border-radius: 34px; border: 1px solid #444;
+        }
+        .slider:before {
+            position: absolute; content: "";
+            height: 18px; width: 18px;
+            left: 3px; bottom: 3px;
+            background-color: var(--text-muted);
+            transition: .4s; border-radius: 50%;
+        }
+        input:checked + .slider {
+            background-color: var(--purple);
+            border-color: var(--purple);
+            box-shadow: 0 0 15px var(--purple);
+        }
+        input:checked + .slider:before {
+            transform: translateX(24px);
+            background-color: #fff;
+            box-shadow: 0 0 10px #fff;
+        }
+        
+        #status {
+            text-align: center;
+            font-size: 0.8rem;
+            color: var(--danger);
+            margin-top: 20px;
+            letter-spacing: 1px;
+        }
+
+        /* Scrollbar Styling */
+        ::-webkit-scrollbar { width: 10px; height: 10px; background-color: #1a1a2e; }
+        ::-webkit-scrollbar-thumb { background: linear-gradient(180deg, #00f2fe 0%, #4facfe 100%); border-radius: 5px; border: 2px solid #1a1a2e; }
+        * { scrollbar-width: thin; scrollbar-color: #00f2fe #1a1a2e; }
+
+        /* Pop-up Timer CSS */
+        .modal-container { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0, 0, 0, 0.8); display: flex; justify-content: center; align-items: center; z-index: 999; }
+        .modal-content { background: #111; border: 2px solid #0ff; padding: 20px; border-radius: 10px; box-shadow: 0 0 15px #0ff; width: 300px; display: flex; flex-direction: column; gap: 10px; }
+        .input-cyber { background: #222; color: #0ff; border: 1px solid #0ff; padding: 8px; border-radius: 5px; font-family: monospace; font-size: 1rem; outline: none; box-sizing: border-box; width: 100%; }
+        .timer-btn { background: transparent; color: #0ff; border: 1px solid #0ff; padding: 5px 10px; cursor: pointer; font-weight: bold; border-radius: 5px; margin-bottom: 15px; }
+        .timer-btn:hover { background: #0ff; color: #000; box-shadow: 0 0 10px #0ff; }
+    </style>
+</head>
+<body>
+
+    <div class="particles-container" id="particles"></div>
+
+    <div class="app-container">
+        
+        <header>
+            <h1>SYSTEM ONLINE</h1>
+            <div class="clock-wrapper">
+                <div class="time-box">
+                    <span class="time" id="clock-time">00:00</span>
+                    <span class="seconds" id="clock-sec">:00</span>
+                </div>
+                <div class="date" id="clock-date">Memuat Tanggal...</div>
+            </div>
+        </header>
+
+        <div class="hero-image">
+            <div class="hero-text">FATHI'S ROOM</div>
+        </div>
+
+        <div class="glass-card sensor-container">
+            <div class="ring-box">
+                <div class="ring temp" id="ui-temp">--°</div>
+                <div class="ring-label">Suhu Area</div>
+            </div>
+            <div class="ring-box">
+                <div class="ring hum" id="ui-hum">--%</div>
+                <div class="ring-label">Kelembapan</div>
+            </div>
+        </div>
+
+        <div class="glass-card">
+            <div class="ring-label" style="margin-bottom: 10px; text-align: center;">Live Temperature Telemetry</div>
+            <div class="chart-container">
+                <canvas id="tempChart"></canvas>
+            </div>
+        </div>
+        
+        <div class="glass-card" style="padding: 10px; text-align: center;">
+            <div class="ring-label" style="margin-bottom: 10px;">Historical Log & Database</div>
+            <div style="width: 100%; overflow-x: auto; overflow-y: hidden; border-radius: 12px;">
+                <iframe src="https://docs.google.com/spreadsheets/d/e/2PACX-1vQZOpJmIePAaVQC5fW9pyOGvMH0gOAH2FEVOaQdq7DMJAWZxt6TvTVekbmTupPMFQOVkbShlZP_g2xF/pubchart?oid=73423430&format=interactive" 
+                        width="100%" 
+                        height="371" 
+                        style="border: none; background: transparent; min-width: 550px;" 
+                        scrolling="no">
+                </iframe>
+            </div>
+        </div>
+
+        <h3 style="margin-bottom: 15px; font-family: 'Orbitron'; color: var(--text-muted); font-size: 1rem;">DEVICE OVERRIDE (8 RELAY)</h3>
+    
+        <div style="text-align: center;">
+            <button onclick="bukaMenuTimer()" class="timer-btn">
+                ⚙️ PENGATURAN JADWAL TIMER
+            </button>
+        </div>
+
+        <!-- Master Controls Update (Kecuali Teras) -->
+        <div class="master-controls">
+            <button class="master-btn btn-off" onclick="setAllRelays('0', true)">
+                <span style="font-size: 1.1rem; margin-right: 5px;">✖</span> MATIKAN
+            </button>
+            <button class="master-btn btn-on" onclick="setAllRelays('1', true)">
+                <span style="font-size: 1.1rem; margin-right: 5px;">⚡</span> NYALAKAN
+            </button>
+        </div>
+        
+        <div class="control-grid">
+            
+            <div class="glass-card relay-card">
+                <div class="relay-icon">💨</div>
+                <div class="relay-name">Exhaust</div>
+                <label class="switch">
+                    <input type="checkbox" id="btn-relay2" onchange="toggleRelay(2)">
+                    <span class="slider"></span>
+                </label>
+            </div>
+
+            <div class="glass-card relay-card">
+                <div class="relay-icon">🌀</div>
+                <div class="relay-name">Kipas</div>
+                <label class="switch">
+                    <input type="checkbox" id="btn-relay1" onchange="toggleRelay(1)">
+                    <span class="slider"></span>
+                </label>
+            </div>
+
+            <div class="glass-card relay-card">
+                <div class="relay-icon">🔥</div>
+                <div class="relay-name">LED Kompor</div>
+                <label class="switch">
+                    <input type="checkbox" id="btn-relay5" onchange="toggleRelay(5)">
+                    <span class="slider"></span>
+                </label>
+            </div>
+
+            <div class="glass-card relay-card">
+                <div class="relay-icon">💡</div>
+                <div class="relay-name">Lampu Utama</div>
+                <label class="switch">
+                    <input type="checkbox" id="btn-relay3" onchange="toggleRelay(3)">
+                    <span class="slider"></span>
+                </label>
+            </div>
+
+            <div class="glass-card relay-card">
+                <div class="relay-icon">💻</div>
+                <div class="relay-name">LED Meja Belajar</div>
+                <label class="switch">
+                    <input type="checkbox" id="btn-relay6" onchange="toggleRelay(6)">
+                    <span class="slider"></span>
+                </label>
+            </div>
+
+            <div class="glass-card relay-card">
+                <div class="relay-icon">🏡</div>
+                <div class="relay-name">Lampu Teras</div>
+                <label class="switch">
+                    <input type="checkbox" id="btn-relay4" onchange="toggleRelay(4)">
+                    <span class="slider"></span>
+                </label>
+            </div>
+
+            <div class="glass-card relay-card">
+                <div class="relay-icon">🔌</div>
+                <div class="relay-name">AUX Port 1</div>
+                <label class="switch">
+                    <input type="checkbox" id="btn-relay7" onchange="toggleRelay(7)">
+                    <span class="slider"></span>
+                </label>
+            </div>
+
+            <div class="glass-card relay-card">
+                <div class="relay-icon">🔋</div>
+                <div class="relay-name">AUX Port 2</div>
+                <label class="switch">
+                    <input type="checkbox" id="btn-relay8" onchange="toggleRelay(8)">
+                    <span class="slider"></span>
+                </label>
+            </div>
+        </div>
+
+        <h3 style="margin-top: 30px; margin-bottom: 15px; font-family: 'Orbitron'; color: var(--text-muted); font-size: 1rem;">BUZZER ALARM SYSTEM</h3>
+        
+        <div class="glass-card" style="padding: 20px;">
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-bottom: 15px;">
+                
+                <div style="background: rgba(255,165,2,0.05); padding: 15px; border-radius: 12px; border: 1px solid rgba(255,165,2,0.2);">
+                    <div style="text-align: center; font-size: 1.5rem; margin-bottom: 5px;">⏳</div>
+                    <h4 style="color: var(--warning); text-align: center; margin-top: 0; font-family: 'Orbitron'; font-size: 0.9rem;">QUICK TIMER</h4>
+                    <label style="color: var(--text-muted); font-size: 0.75rem;">Set Menit:</label>
+                    <input type="number" id="inputMenit" class="input-cyber" style="border-color: var(--warning); color: var(--warning); margin-bottom: 10px;" placeholder="Misal: 3" min="1">
+                    <button onclick="kirimAlarm('TIMER')" class="master-btn btn-warning" style="width: 100%; padding: 8px;">START TIMER</button>
+                </div>
+
+                <div style="background: rgba(188,19,254,0.05); padding: 15px; border-radius: 12px; border: 1px solid rgba(188,19,254,0.2);">
+                    <div style="text-align: center; font-size: 1.5rem; margin-bottom: 5px;">⏰</div>
+                    <h4 style="color: var(--purple); text-align: center; margin-top: 0; font-family: 'Orbitron'; font-size: 0.9rem;">ALARM CLOCK</h4>
+                    <label style="color: var(--text-muted); font-size: 0.75rem;">Set Waktu:</label>
+                    <input type="time" id="inputJamAlarm" class="input-cyber" style="border-color: var(--purple); color: var(--purple); margin-bottom: 10px;">
+                    <button onclick="kirimAlarm('ALARM')" class="master-btn" style="width: 100%; padding: 8px; border-color: var(--purple); color: var(--purple);">SET ALARM</button>
+                </div>
+
+            </div>
+
+            <button onclick="kirimAlarm('STOP')" class="master-btn btn-off" style="width: 100%;">
+                <span style="font-size: 1.1rem; margin-right: 5px;">🔕</span> MATIKAN BUNYI ALARM
+            </button>
+            <p id="alarmStatus" style="text-align: center; font-size: 0.8rem; color: var(--text-muted); margin-top: 10px; margin-bottom: 0;">Status: Tidak ada alarm aktif</p>
+        </div>
+
+        <!-- Tombol Sinkronisasi Jam Manual (DIPINDAH KE SINI) -->
+        <h3 style="margin-top: 30px; margin-bottom: 15px; font-family: 'Orbitron'; color: var(--text-muted); font-size: 1rem;">SYSTEM MAINTENANCE</h3>
+        <div class="glass-card" style="padding: 15px; text-align: center;">
+            <div class="ring-label" style="margin-bottom: 10px;">Time Calibration Server</div>
+            <button onclick="sinkronkanJam()" class="master-btn btn-warning" style="width: 100%; border-color: rgba(255, 165, 2, 0.4);">
+                <span style="font-size: 1.1rem; margin-right: 5px;">🔄</span> SINKRONKAN JAM INTERNET (NTP)
+            </button>
+        </div>
+    
+        <div id="modalTimer" class="modal-container" style="display: none;">
+            <div class="modal-content" style="width: 90%; max-width: 600px;">
+                <h3 style="color: #0ff; text-shadow: 0 0 5px #0ff; text-align: center; margin-bottom: 20px;">⚡ TIMING PROTOCOLS ⚡</h3>
+                
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px;">
+                    
+                    <div class="glass-card" style="margin-bottom: 0; padding: 15px; border-color: rgba(188, 19, 254, 0.4);">
+                        <h4 style="color: var(--purple); text-align: center; margin-top: 0; font-family: 'Orbitron';">🔄 DAILY PROTOCOL</h4>
+                        <label style="color: var(--text-muted); font-size: 0.8rem;">Target Device:</label>
+                        <select id="alatRutin" class="input-cyber" style="margin-bottom: 10px;">
+                            <option value="R2">Exhaust (R2)</option>
+                            <option value="R1">Kipas (R1)</option>
+                            <option value="R5">LED Kompor (R5)</option>
+                            <option value="R3">Lampu Utama (R3)</option>
+                            <option value="R6">LED Meja Belajar (R6)</option>
+                            <option value="R4">Lampu Teras (R4)</option>
+                            <option value="R7">AUX Port 1 (R7)</option>
+                            <option value="R8">AUX Port 2 (R8)</option>
+                        </select>
+                        <label style="color: var(--text-muted); font-size: 0.8rem;">Action:</label>
+                        <select id="aksiRutin" class="input-cyber" style="margin-bottom: 10px;">
+                            <option value="ON">Nyalakan Tiap Hari</option>
+                            <option value="OFF">Matikan Tiap Hari</option>
+                        </select>
+                        <label style="color: var(--text-muted); font-size: 0.8rem;">Execution Time:</label>
+                        <input type="time" id="jamRutin" class="input-cyber" style="margin-bottom: 15px;" required>
+                        <button onclick="kirimTimer('DAILY')" class="master-btn" style="width: 100%; border-color: var(--purple); color: var(--purple);">SET DAILY</button>
+                    </div>
+
+                    <div class="glass-card" style="margin-bottom: 0; padding: 15px; border-color: rgba(0, 243, 255, 0.4);">
+                        <h4 style="color: var(--cyan); text-align: center; margin-top: 0; font-family: 'Orbitron';">⚡ ONE-SHOT TRIGGER</h4>
+                        <label style="color: var(--text-muted); font-size: 0.8rem;">Target Device:</label>
+                        <select id="alatDadakan" class="input-cyber" style="margin-bottom: 10px;">
+                            <option value="R2">Exhaust (R2)</option>
+                            <option value="R1">Kipas (R1)</option>
+                            <option value="R5">LED Kompor (R5)</option>
+                            <option value="R3">Lampu Utama (R3)</option>
+                            <option value="R6">LED Meja Belajar (R6)</option>
+                            <option value="R4">Lampu Teras (R4)</option>
+                            <option value="R7">AUX Port 1 (R7)</option>
+                            <option value="R8">AUX Port 2 (R8)</option>
+                        </select>
+                        <label style="color: var(--text-muted); font-size: 0.8rem;">Action:</label>
+                        <select id="aksiDadakan" class="input-cyber" style="margin-bottom: 10px;">
+                            <option value="ON">Nyalakan (1x)</option>
+                            <option value="OFF">Matikan (1x)</option>
+                        </select>
+                        <label style="color: var(--text-muted); font-size: 0.8rem;">Execution Time:</label>
+                        <input type="time" id="jamDadakan" class="input-cyber" style="margin-bottom: 15px;" required>
+                        <button onclick="kirimTimer('ONCE')" class="master-btn btn-on" style="width: 100%;">SET TRIGGER</button>
+                    </div>
+
+                </div>
+
+                <div id="scheduleContainer" style="margin-top: 15px;">
+                    <p style="color: var(--text-muted); text-align: center; font-size: 0.8rem;">Tidak ada jadwal aktif.</p>
+                </div>
+                
+                <button onclick="tutupMenuTimer()" class="master-btn btn-off" style="margin-top: 15px; width: 100%;">TUTUP PANEL</button>
+            </div>
+        </div>
+
+        <div id="status">MQTT: DISCONNECTED 🔴</div>
+    </div>
+
+    <script>
+        // Animasi Partikel
+        const particleContainer = document.getElementById('particles');
+        for (let i = 0; i < 25; i++) {
+            let p = document.createElement('div');
+            p.className = 'particle';
+            p.style.left = Math.random() * 100 + 'vw';
+            p.style.animationDuration = (Math.random() * 12 + 8) + 's';
+            p.style.animationDelay = Math.random() * 10 + 's';
+            particleContainer.appendChild(p);
+        }
+
+        // Jam Digital
+        function updateClock() {
+            const now = new Date();
+            const h = String(now.getHours()).padStart(2, '0');
+            const m = String(now.getMinutes()).padStart(2, '0');
+            const s = String(now.getSeconds()).padStart(2, '0');
+            const days = ['Minggu', 'Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu'];
+            const months = ['Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Ags', 'Sep', 'Okt', 'Nov', 'Des'];
+            const dateStr = `${days[now.getDay()]}, ${now.getDate()} ${months[now.getMonth()]} ${now.getFullYear()}`;
+            
+            document.getElementById('clock-time').innerText = `${h}:${m}`;
+            document.getElementById('clock-sec').innerText = `:${s}`;
+            document.getElementById('clock-date').innerText = dateStr;
+        }
+        setInterval(updateClock, 1000);
+        updateClock();
+
+        // Grafik Suhu
+        const ctx = document.getElementById('tempChart').getContext('2d');
+        let gradient = ctx.createLinearGradient(0, 0, 0, 200);
+        gradient.addColorStop(0, 'rgba(0, 243, 255, 0.4)');
+        gradient.addColorStop(1, 'rgba(0, 243, 255, 0)');
+
+        const tempChart = new Chart(ctx, {
+            type: 'line',
+            data: {
+                labels: [], 
+                datasets: [{
+                    label: 'Suhu (°C)',
+                    data: [], 
+                    borderColor: '#00f3ff',
+                    backgroundColor: gradient,
+                    borderWidth: 2,
+                    pointBackgroundColor: '#fff',
+                    pointBorderColor: '#00f3ff',
+                    pointRadius: 3,
+                    fill: true,
+                    tension: 0.4 
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                scales: {
+                    x: { ticks: { color: '#8a9ba8', font: { family: 'Rajdhani' } }, grid: { display: false } },
+                    y: { ticks: { color: '#8a9ba8', font: { family: 'Rajdhani' } }, grid: { color: 'rgba(255,255,255,0.05)' } }
+                },
+                plugins: { legend: { display: false } }
+            }
+        });
+
+        function updateChart(time, temp) {
+            if (tempChart.data.labels.length > 15) {
+                tempChart.data.labels.shift();
+                tempChart.data.datasets[0].data.shift();
+            }
+            tempChart.data.labels.push(time);
+            tempChart.data.datasets[0].data.push(temp);
+            tempChart.update();
+        }
+
+        // MQTT Client
+        const mqttServer = "broker.hivemq.com";
+        const mqttPort = 8000; 
+        const clientId = "WebClient_" + Math.random().toString(16).substr(2, 8);
+        const client = new Paho.MQTT.Client(mqttServer, mqttPort, clientId);
+
+        client.onConnectionLost = function(responseObject) {
+            document.getElementById('status').innerHTML = "MQTT: DISCONNECTED 🔴";
+            document.getElementById('status').style.color = "var(--danger)";
+            setTimeout(MQTTconnect, 5000); 
+        };
+
+        client.onMessageArrived = function(message) {
+            try {
+                let topic = message.destinationName;
+                let payload = message.payloadString;
+                
+                if (topic === "fathi/kamar/suhu") {
+                    document.getElementById('ui-temp').innerText = payload + '°';
+                    let timeNow = new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' });
+                    updateChart(timeNow, parseFloat(payload));
+                }
+                else if (topic === "fathi/kamar/kelembapan") {
+                    document.getElementById('ui-hum').innerText = payload + '%';
+                }
+                else if (topic === "fathi/kamar/sync_response") {
+                    activeSchedules = [];
+                    if (payload.startsWith("SYNC:") && payload.length > 5) {
+                        let rawData = payload.substring(5);
+                        let items = rawData.split(";");
+                        items.forEach(item => {
+                            let parts = item.split(",");
+                            if (parts.length === 5) {
+                                activeSchedules.push({
+                                    id: parseInt(parts[0]),
+                                    alat: parts[1],
+                                    aksi: parts[2],
+                                    jam: parts[3],
+                                    tipe: parts[4]
+                                });
+                            }
+                        });
+                    }
+                    renderScheduleList();
+                }
+                else if (topic.startsWith("fathi/kamar/relay")) {
+                    let num = topic.slice(-1); 
+                    let checkbox = document.getElementById('btn-relay' + num);
+                    if (checkbox) {
+                        checkbox.checked = (payload === "1");
+                    }
+                }
+                // --- Tangkap Status Alarm dari ESP32 ---
+                else if (topic === "fathi/kamar/alarm_status") {
+                    let statusEl = document.getElementById('alarmStatus');
+                    if (statusEl) {
+                        statusEl.innerText = "Status: " + payload;
+                        if(payload.includes("BUNYI")) {
+                            statusEl.style.color = "var(--danger)";
+                            statusEl.style.fontWeight = "bold";
+                        } else {
+                            statusEl.style.color = "var(--text-muted)";
+                            statusEl.style.fontWeight = "normal";
+                        }
+                    }
+                }
+            } catch (err) {
+                console.error("Aman, koneksi ga putus! Tapi ada error JS: ", err);
+            }
+        };
+
+        function MQTTconnect() {
+            document.getElementById('status').innerHTML = "MQTT: CONNECTING... 🟡";
+            document.getElementById('status').style.color = "var(--warning)";
+            
+            client.connect({
+                keepAliveInterval: 30, // Nafas panjang
+                onSuccess: function() {
+                    document.getElementById('status').innerHTML = "MQTT: CONNECTED 🟢";
+                    document.getElementById('status').style.color = "#2ed573";
+                    
+                    client.subscribe("fathi/kamar/suhu");
+                    client.subscribe("fathi/kamar/kelembapan");
+                    client.subscribe("fathi/kamar/sync_response"); 
+                    client.subscribe("fathi/kamar/alarm_status"); // Listen status alarm
+                    client.subscribe("fathi/kamar/sync_time"); 
+                    
+                    for (let i = 1; i <= 8; i++) {
+                        client.subscribe("fathi/kamar/relay" + i);
+                    }
+                    
+                    setTimeout(function() {
+                        let syncMsg = new Paho.MQTT.Message("GET_SYNC");
+                        syncMsg.destinationName = "fathi/kamar/timer";
+                        client.send(syncMsg);
+                    }, 2000);
+                },
+                onFailure: function() {
+                    setTimeout(MQTTconnect, 5000);
+                }
+            });
+        }
+
+        function toggleRelay(relayNumber) {
+            let checkbox = document.getElementById('btn-relay' + relayNumber);
+            let payload = checkbox.checked ? "1" : "0";
+            let topic = "fathi/kamar/relay" + relayNumber;
+
+            let message = new Paho.MQTT.Message(payload);
+            message.destinationName = topic;
+            client.send(message);
+        }
+        
+        // --- FUNGSI MASTER RELAY UPDATE (KECUALI TERAS) ---
+        function setAllRelays(state, excludeTeras) {
+            for (let i = 1; i <= 8; i++) {
+                // Lewati Relay 4 (Lampu Teras) jika tombol ditekan, baik saat ON maupun OFF
+                if (excludeTeras && i === 4) {
+                    continue; 
+                }
+                
+                let checkbox = document.getElementById('btn-relay' + i);
+                if (checkbox) checkbox.checked = (state === "1");
+                let topic = "fathi/kamar/relay" + i;
+                let message = new Paho.MQTT.Message(state);
+                message.destinationName = topic;
+                client.send(message);
+            }
+        }
+
+        // --- FUNGSI SINKRONISASI JAM VIA MQTT ---
+        function sinkronkanJam() {
+            let message = new Paho.MQTT.Message("SYNC_NOW");
+            message.destinationName = "fathi/kamar/sync_time";
+            client.send(message);
+        }
+
+        // --- FUNGSI ALARM / BUZZER ---
+        function kirimAlarm(tipe) {
+            let payload = "";
+            if (tipe === 'TIMER') {
+                let mnt = document.getElementById('inputMenit').value;
+                if(!mnt) { alert("Masukkan menit dulu!"); return; }
+                payload = "TIMER:" + mnt;
+            } else if (tipe === 'ALARM') {
+                let jam = document.getElementById('inputJamAlarm').value;
+                if(!jam) { alert("Masukkan jam dulu!"); return; }
+                payload = "ALARM:" + jam;
+            } else if (tipe === 'STOP') {
+                payload = "STOP";
+            }
+            
+            let message = new Paho.MQTT.Message(payload);
+            message.destinationName = "fathi/kamar/alarm";
+            client.send(message);
+        }
+
+        // --- MANAJEMEN MODAL & TASK LIST JADWAL ---
+        function bukaMenuTimer() {
+            document.getElementById('modalTimer').style.display = 'flex';
+        }
+
+        function tutupMenuTimer() {
+            document.getElementById('modalTimer').style.display = 'none';
+        }
+
+        let activeSchedules = [];
+
+        function kirimTimer(tipe) {
+            let alat, aksi, jam;
+
+            if (tipe === 'DAILY') {
+                alat = document.getElementById('alatRutin').value;
+                aksi = document.getElementById('aksiRutin').value;
+                jam = document.getElementById('jamRutin').value;
+            } else {
+                alat = document.getElementById('alatDadakan').value;
+                aksi = document.getElementById('aksiDadakan').value;
+                jam = document.getElementById('jamDadakan').value;
+            }
+
+            if (jam === "") {
+                alert("Sistem menolak: Waktu eksekusi belum ditentukan!");
+                return;
+            }
+
+            let uniqueId = Date.now();
+            let payloadTimer = "ADD:" + alat + "_" + aksi + "_" + jam + "_" + tipe + "_" + uniqueId;
+            
+            let message = new Paho.MQTT.Message(payloadTimer);
+            message.destinationName = "fathi/kamar/timer";
+            client.send(message);
+
+            activeSchedules.push({ id: uniqueId, alat, aksi, jam, tipe });
+            renderScheduleList();
+        }
+
+        function hapusTask(idUnik) {
+            let payloadHapus = "DEL:" + idUnik;
+            let message = new Paho.MQTT.Message(payloadHapus);
+            message.destinationName = "fathi/kamar/timer";
+            client.send(message);
+
+            activeSchedules = activeSchedules.filter(item => item.id !== idUnik);
+            renderScheduleList();
+        }
+
+        function renderScheduleList() {
+            let container = document.getElementById('scheduleContainer');
+            if (!container) return;
+
+            if (activeSchedules.length === 0) {
+                container.innerHTML = `<p style="color: var(--text-muted); text-align: center; font-size: 0.8rem; margin-top: 10px;">Tidak ada jadwal aktif.</p>`;
+                return;
+            }
+
+            let html = `<h4 style="color: #0ff; font-family: 'Orbitron'; font-size: 0.85rem; margin-top: 10px; margin-bottom: 5px;">ACTIVE SCHEDULES LIST:</h4>`;
+            html += `<div style="max-height: 110px; overflow-y: auto;">`;
+            
+            activeSchedules.forEach(item => {
+                let namaAlat = item.alat;
+                if(item.alat === "R1") namaAlat = "Kipas";
+                if(item.alat === "R2") namaAlat = "Exhaust";
+                if(item.alat === "R3") namaAlat = "Lampu Utama";
+                if(item.alat === "R4") namaAlat = "Lampu Teras";
+                if(item.alat === "R5") namaAlat = "LED Kompor";
+                if(item.alat === "R6") namaAlat = "LED Meja Belajar";
+                if(item.alat === "R7") namaAlat = "AUX Port 1";
+                if(item.alat === "R8") namaAlat = "AUX Port 2";
+
+                html += `
+                    <div style="display: flex; justify-content: space-between; align-items: center; background: rgba(0,243,255,0.05); border: 1px solid rgba(0,243,255,0.2); padding: 4px 8px; margin-bottom: 4px; border-radius: 4px;">
+                        <span style="font-size: 0.75rem; color: #fff;">[${item.tipe}] ${namaAlat} - ${item.aksi} @ ${item.jam}</span>
+                        <button onclick="hapusTask(${item.id})" style="background: #ff3333; color: #fff; border: none; padding: 2px 6px; font-size: 0.65rem; cursor: pointer; border-radius: 3px;">Hapus</button>
+                    </div>
+                `;
+            });
+            html += `</div>`;
+            container.innerHTML = html;
+        }
+
+        MQTTconnect();
+    </script>
+</body>
+</html>
