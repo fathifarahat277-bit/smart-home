@@ -121,24 +121,22 @@
         }
 
         /* --- ILUSTRASI KAMAR (HERO IMAGE) --- */
-.hero-image {
-    width: 100%;
-    height: 220px;
-    border-radius: 20px;
-    /* Menggabungkan gradien dan gambar dalam satu perintah */
-    background: linear-gradient(to bottom, rgba(11,12,16,0) 30%, rgba(11,12,16,1) 100%),
-                url('https://i.pinimg.com/736x/ed/0e/2c/ed0e2c91c48b75aaf04aa79e98d9d301.jpg');
-    background-size: cover;
-    background-position: center;
-    background-repeat: no-repeat;
-    margin-bottom: 25px;
-    border: 1px solid var(--glass-border);
-    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
-    position: relative;
-    overflow: hidden;
-    /* Trik ampuh untuk mencegah gambar bocor dari sudut melengkung */
-    transform: translateZ(0);
-}
+        .hero-image {
+            width: 100%;
+            height: 220px;
+            border-radius: 20px;
+            background: linear-gradient(to bottom, rgba(11,12,16,0) 30%, rgba(11,12,16,1) 100%),
+                        url('https://i.pinimg.com/736x/ed/0e/2c/ed0e2c91c48b75aaf04aa79e98d9d301.jpg');
+            background-size: cover;
+            background-position: center;
+            background-repeat: no-repeat;
+            margin-bottom: 25px;
+            border: 1px solid var(--glass-border);
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+            position: relative;
+            overflow: hidden;
+            transform: translateZ(0);
+        }
         .hero-text {
             position: absolute;
             bottom: 20px;
@@ -344,7 +342,8 @@
     <div class="app-container">
         
         <header>
-            <h1>SYSTEM ONLINE</h1>
+            <!-- Di sini update tag H1 nya -->
+            <h1>SYSTEM <span id="system-status-text" style="color: var(--warning); text-shadow: 0 0 10px var(--warning);">CONNECTING...</span></h1>
             <div class="clock-wrapper">
                 <div class="time-box">
                     <span class="time" id="clock-time">00:00</span>
@@ -668,6 +667,15 @@
         client.onConnectionLost = function(responseObject) {
             document.getElementById('status').innerHTML = "MQTT: DISCONNECTED 🔴";
             document.getElementById('status').style.color = "var(--danger)";
+            
+            // Logika untuk ubah Header H1 saat Offline
+            let sysStatus = document.getElementById('system-status-text');
+            if (sysStatus) {
+                sysStatus.innerText = "OFFLINE";
+                sysStatus.style.color = "var(--danger)";
+                sysStatus.style.textShadow = "0 0 10px var(--danger)";
+            }
+            
             setTimeout(MQTTconnect, 5000); 
         };
 
@@ -734,12 +742,28 @@
             document.getElementById('status').innerHTML = "MQTT: CONNECTING... 🟡";
             document.getElementById('status').style.color = "var(--warning)";
             
+            // Logika untuk ubah Header H1 saat Loading/Connecting
+            let sysStatus = document.getElementById('system-status-text');
+            if (sysStatus) {
+                sysStatus.innerText = "CONNECTING...";
+                sysStatus.style.color = "var(--warning)";
+                sysStatus.style.textShadow = "0 0 10px var(--warning)";
+            }
+            
             client.connect({
                 useSSL: true,
                 keepAliveInterval: 30, // Nafas panjang
                 onSuccess: function() {
                     document.getElementById('status').innerHTML = "MQTT: CONNECTED 🟢";
                     document.getElementById('status').style.color = "#2ed573";
+                    
+                    // Logika untuk ubah Header H1 saat Berhasil Online
+                    let sysStatus = document.getElementById('system-status-text');
+                    if (sysStatus) {
+                        sysStatus.innerText = "ONLINE";
+                        sysStatus.style.color = "#2ed573";
+                        sysStatus.style.textShadow = "0 0 10px #2ed573";
+                    }
                     
                     client.subscribe("fathi/kamar/suhu");
                     client.subscribe("fathi/kamar/kelembapan");
