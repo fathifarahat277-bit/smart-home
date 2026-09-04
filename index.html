@@ -649,11 +649,13 @@
             tempChart.update();
         }
 
-        // MQTT Client
-        const mqttServer = "broker.hivemq.com";
-        const mqttPort = 8000; 
-        const clientId = "WebClient_" + Math.random().toString(16).substr(2, 8);
-        const client = new Paho.MQTT.Client(mqttServer, mqttPort, clientId);
+       // Ganti port ke jalur aman WSS (biasanya port 8884 atau 8883 untuk HiveMQ WebSocket secure)
+const mqttServer = "broker.hivemq.com";
+const mqttPort = 8884; // Port Secure WebSocket
+const clientId = "WebClient_" + Math.random().toString(16).substr(2, 8);
+
+// Tambahkan opsi useSSL: true agar diizinkan oleh browser ber-HTTPS
+const client = new Paho.MQTT.Client(mqttServer, mqttPort, clientId);
 
         client.onConnectionLost = function(responseObject) {
             document.getElementById('status').innerHTML = "MQTT: DISCONNECTED 🔴";
@@ -725,6 +727,7 @@
             document.getElementById('status').style.color = "var(--warning)";
             
             client.connect({
+                useSSL: true,
                 keepAliveInterval: 30, // Nafas panjang
                 onSuccess: function() {
                     document.getElementById('status').innerHTML = "MQTT: CONNECTED 🟢";
