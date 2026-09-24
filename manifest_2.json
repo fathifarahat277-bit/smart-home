@@ -1,0 +1,19 @@
+{
+  "name": "Fathi's Command Center",
+  "short_name": "Fathi's Command Center",
+  "display": "standalone",
+  "background_color": "#0F172A",
+  "theme_color": "#0F172A",
+  "icons": [
+    {
+      "src": "fathi_logo_transparan.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "fathi_logo_transparan.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ]
+}
