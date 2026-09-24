@@ -1,0 +1,302 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Panel Muda Teknindo</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/paho-mqtt/1.0.1/mqttws31.min.js"></script>
+    <style>
+        /* Menambahkan font Orbitron untuk Jam Digital */
+        @import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@500;700&family=Poppins:wght@400;500;600;700&display=swap');
+        
+        body { 
+            font-family: 'Poppins', sans-serif; 
+            background-color: #0F172A;
+            background-image: radial-gradient(#1E293B 1px, transparent 1px);
+            background-size: 20px 20px;
+            color: #E2E8F0;
+            margin: 0; 
+            padding: 20px 15px;
+            display: flex;
+            justify-content: center;
+            min-height: 100vh;
+        }
+        
+        .app-container { width: 100%; max-width: 600px; }
+
+        .header-panel {
+            background: rgba(30, 41, 59, 0.7);
+            backdrop-filter: blur(10px);
+            border: 1px solid #334155;
+            padding: 20px;
+            border-radius: 16px;
+            margin-bottom: 25px;
+            box-shadow: 0 10px 25px rgba(0,0,0,0.3);
+        }
+
+        .header-top {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 10px;
+        }
+
+        .company-name {
+            font-size: 20px;
+            font-weight: 700;
+            color: #F8FAFC;
+            letter-spacing: 0.5px;
+            margin: 0;
+        }
+        
+        .company-name span { color: #3B82F6; }
+
+        .subtitle { color: #94A3B8; font-size: 12px; margin: 0 0 15px 0; font-weight: 500; }
+        
+        /* Gaya Jam Digital Baru yang Lebih Menarik */
+        .clock {
+            font-family: 'Orbitron', sans-serif;
+            font-size: 14px;
+            font-weight: 700;
+            color: #38BDF8;
+            background: #0B1121;
+            padding: 8px 12px;
+            border-radius: 8px;
+            border: 1px solid #0369A1;
+            box-shadow: 0 0 10px rgba(14, 165, 233, 0.3), inset 0 0 5px rgba(14, 165, 233, 0.2);
+            letter-spacing: 2px;
+        }
+
+        .status-container { display: flex; gap: 8px; flex-wrap: wrap; }
+        
+        .status-badge {
+            display: inline-flex; align-items: center; gap: 6px;
+            padding: 5px 10px; border-radius: 6px; font-size: 10px; font-weight: 600;
+            background: #0F172A; border: 1px solid #334155; color: #94A3B8;
+            text-transform: uppercase; letter-spacing: 0.5px;
+        }
+        
+        /* Status Server (Biru) */
+        .status-badge.online-blue { border-color: #3B82F6; color: #60A5FA; background: rgba(59, 130, 246, 0.1); }
+        
+        /* Status ESP32 (Hijau Menyala) */
+        .status-badge.online-green { border-color: #10B981; color: #34D399; background: rgba(16, 185, 129, 0.1); }
+        .status-badge.online-green .dot { box-shadow: 0 0 8px #34D399; }
+        
+        .status-badge.offline { border-color: #DC2626; color: #EF4444; background: rgba(239, 68, 68, 0.1); }
+        .dot { width: 6px; height: 6px; border-radius: 50%; background: currentColor; box-shadow: 0 0 5px currentColor; }
+
+        .grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; }
+
+        .card {
+            background: #1E293B; border: 1px solid #334155; border-radius: 12px;
+            padding: 15px; transition: all 0.3s ease; position: relative;
+            display: flex; flex-direction: column;
+        }
+
+        .card.on {
+            border-color: #3B82F6;
+            background: linear-gradient(145deg, #1E293B 0%, #1E3A8A 150%);
+            box-shadow: 0 8px 20px rgba(59, 130, 246, 0.2);
+        }
+
+        .card-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
+
+        .icon-box {
+            width: 32px; height: 32px; border-radius: 8px;
+            display: flex; align-items: center; justify-content: center;
+            background: #0F172A; color: #64748B; border: 1px solid #334155;
+        }
+        
+        .card.on .icon-box { background: rgba(59, 130, 246, 0.2); color: #60A5FA; border-color: #3B82F6; }
+        
+        .ch-label { font-size: 10px; color: #64748B; font-weight: 600; letter-spacing: 0.5px; }
+
+        /* Desain Area Nama + Tombol Edit */
+        .name-container {
+            display: flex; justify-content: space-between; align-items: center;
+            margin-bottom: 15px; border-bottom: 1px dashed #475569; padding-bottom: 5px;
+        }
+        
+        .ch-name {
+            color: #F8FAFC; font-size: 13px; font-weight: 600;
+            white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+        }
+        .card.on .ch-name { color: #FFFFFF; }
+
+        .edit-btn {
+            background: transparent; border: none; color: #94A3B8; cursor: pointer;
+            padding: 4px; border-radius: 4px; transition: 0.2s; display: flex; align-items: center;
+        }
+        .edit-btn:hover { color: #38BDF8; background: rgba(255,255,255,0.1); }
+        .card.on .edit-btn { color: #93C5FD; }
+
+        .toggle-btn {
+            padding: 10px; border-radius: 8px; border: 1px solid #334155;
+            font-size: 11px; font-weight: 600; cursor: pointer; transition: 0.2s;
+            display: flex; justify-content: center; align-items: center; gap: 6px;
+            width: 100%; letter-spacing: 0.5px;
+        }
+        
+        .card.off .toggle-btn { background: #0F172A; color: #94A3B8; }
+        .card.on .toggle-btn { background: #3B82F6; color: #FFFFFF; border-color: #3B82F6; }
+
+        .spinner {
+            display: none; width: 12px; height: 12px;
+            border: 2px solid currentColor; border-top-color: transparent;
+            border-radius: 50%; animation: spin 0.8s linear infinite;
+        }
+        
+        .card.syncing .spinner { display: inline-block; }
+        .card.syncing .btn-text { display: none; }
+
+        @keyframes spin { to { transform: rotate(360deg); } }
+    </style>
+</head>
+<body>
+
+<div class="app-container">
+    <div class="header-panel">
+        <div class="header-top">
+            <h1 class="company-name">Muda <span>Teknindo</span></h1>
+            <div class="clock" id="digital-clock">00:00:00</div>
+        </div>
+        <p class="subtitle">Main Distribution Panel Monitoring</p>
+        
+        <div class="status-container">
+            <div class="status-badge" id="server-status"><div class="dot"></div> Server Disconnected</div>
+            <div class="status-badge offline" id="alat-status"><div class="dot"></div> ESP32 Offline</div>
+        </div>
+    </div>
+    
+    <div class="grid" id="relay-container"></div>
+</div>
+
+<script>
+    const broker = "broker.hivemq.com";
+    const port = 8884;
+    const clientId = "web-scada-" + Math.random().toString(16).substr(2, 8);
+    const topicBase = "pabrik/fathi/relay/";
+    const alatStatusTopic = "pabrik/fathi/status_alat";
+
+    const iconAlarm = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M13.73 21a2 2 0 0 1-3.46 0"></path><path d="M18.63 13A17.89 17.89 0 0 1 18 8"></path><path d="M6.26 6.26A5.86 5.86 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"></path><path d="M18 8a6 6 0 0 0-9.33-5"></path></svg>`;
+    const iconMesin = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>`;
+    const iconEdit = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"></path><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4 12.5-12.5z"></path></svg>`;
+
+    setInterval(() => {
+        const now = new Date();
+        document.getElementById("digital-clock").innerText = now.toLocaleTimeString('id-ID', { hour12: false });
+    }, 1000);
+
+    const container = document.getElementById("relay-container");
+    for(let i = 1; i <= 6; i++) {
+        let savedName = localStorage.getItem("namaRelay" + i) || (i === 1 ? "Alarm Utama" : "Channel " + i);
+        let currentIcon = i === 1 ? iconAlarm : iconMesin;
+        
+        container.innerHTML += `
+            <div class="card off" id="card-${i}">
+                <div class="card-header">
+                    <div class="icon-box">${currentIcon}</div>
+                    <div class="ch-label">CH 0${i}</div>
+                </div>
+                <div class="name-container">
+                    <span class="ch-name" id="name-display-${i}">${savedName}</span>
+                    <button class="edit-btn" onclick="editName(${i})" title="Edit Nama">
+                        ${iconEdit}
+                    </button>
+                </div>
+                <button class="toggle-btn" onclick="toggleRelay(${i})">
+                    <span class="spinner"></span>
+                    <span class="btn-text" id="btn-text-${i}">TURN ON</span>
+                </button>
+            </div>
+        `;
+    }
+
+    // Fungsi pop-up untuk edit nama dengan aman
+    function editName(id) {
+        let currentName = localStorage.getItem("namaRelay" + id) || (id === 1 ? "Alarm Utama" : "Channel " + id);
+        let newName = prompt("Masukkan nama baru untuk Channel " + id + ":", currentName);
+        
+        if (newName !== null && newName.trim() !== "") {
+            localStorage.setItem("namaRelay" + id, newName.trim());
+            document.getElementById("name-display-" + id).innerText = newName.trim();
+        }
+    }
+
+    let relayStates = {1: "OFF", 2: "OFF", 3: "OFF", 4: "OFF", 5: "OFF", 6: "OFF"};
+
+    const client = new Paho.MQTT.Client(broker, port, "/mqtt", clientId);
+    client.onConnectionLost = onConnectionLost;
+    client.onMessageArrived = onMessageArrived;
+
+    client.connect({
+        useSSL: true,
+        onSuccess: () => {
+            let srvStatus = document.getElementById("server-status");
+            srvStatus.className = "status-badge online-blue";
+            srvStatus.innerHTML = "<div class='dot'></div> Server Connected";
+            client.subscribe(topicBase + "+/status");
+            client.subscribe(alatStatusTopic);
+        }
+    });
+
+    function onConnectionLost(res) {
+        let srvStatus = document.getElementById("server-status");
+        srvStatus.className = "status-badge offline";
+        srvStatus.innerHTML = "<div class='dot'></div> Server Disconnected";
+        let alatStatus = document.getElementById("alat-status");
+        alatStatus.className = "status-badge offline";
+        alatStatus.innerHTML = "<div class='dot'></div> ESP32 Offline";
+    }
+
+    function onMessageArrived(message) {
+        let topic = message.destinationName;
+        let payload = message.payloadString;
+
+        if (topic === alatStatusTopic) {
+            let alatStatus = document.getElementById("alat-status");
+            if(payload === "ONLINE") {
+                // Berubah jadi warna hijau menyala (online-green)
+                alatStatus.className = "status-badge online-green";
+                alatStatus.innerHTML = "<div class='dot'></div> ESP32 Online";
+            } else {
+                alatStatus.className = "status-badge offline";
+                alatStatus.innerHTML = "<div class='dot'></div> ESP32 Offline";
+            }
+            return;
+        }
+
+        if (topic.includes("/relay/") && topic.endsWith("/status")) {
+            let relayNum = topic.split("/")[3];
+            let card = document.getElementById("card-" + relayNum);
+            let btnText = document.getElementById("btn-text-" + relayNum);
+            
+            card.classList.remove("syncing");
+            relayStates[relayNum] = payload;
+
+            if (payload === "ON") {
+                card.classList.remove("off"); card.classList.add("on");
+                btnText.innerHTML = "TURN OFF";
+            } else {
+                card.classList.remove("on"); card.classList.add("off");
+                btnText.innerHTML = "TURN ON";
+            }
+        }
+    }
+
+    function toggleRelay(relayNum) {
+        if (!client.isConnected()) { alert("Server terputus!"); return; }
+        
+        let card = document.getElementById("card-" + relayNum);
+        card.classList.add("syncing"); 
+        
+        let targetState = relayStates[relayNum] === "ON" ? "OFF" : "ON";
+        let message = new Paho.MQTT.Message(targetState);
+        message.destinationName = topicBase + relayNum + "/set";
+        client.send(message);
+    }
+</script>
+
+</body>
+</html>
