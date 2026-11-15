@@ -227,6 +227,8 @@
         }
         .relay-icon { font-size: 1.5rem; margin-bottom: 10px; }
         .relay-name { font-size: 1.1rem; font-weight: 600; margin-bottom: 15px; }
+        /* belum sinkron dengan ESP32: redup & tidak bisa diklik */
+        .relay-card.menunggu, .master-controls.menunggu { opacity: 0.4; pointer-events: none; transition: opacity 0.3s; }
 
         /* --- MASTER CONTROL BUTTONS --- */
         .master-controls {
@@ -671,39 +673,6 @@
 
         let activeSchedules = [];
 
-        // ---------- CACHE: halaman langsung berisi data terakhir saat dibuka ----------
-        const CACHE_KEY = "fathi_cache_v2";
-        let cache = { t: null, h: null, relays: {}, sched: [], chartL: [], chartD: [] };
-        let saveTimer = null;
-
-        function loadCache() {
-            try {
-                const c = JSON.parse(localStorage.getItem(CACHE_KEY));
-                if (c) cache = Object.assign(cache, c);
-            } catch (e) {}
-        }
-        function saveCache() {
-            clearTimeout(saveTimer);
-            saveTimer = setTimeout(function () {
-                try { localStorage.setItem(CACHE_KEY, JSON.stringify(cache)); } catch (e) {}
-            }, 300);
-        }
-        function applyCache() {
-            if (cache.t !== null) document.getElementById('ui-temp').innerText = cache.t + '°';
-            if (cache.h !== null) document.getElementById('ui-hum').innerText = cache.h + '%';
-            for (let i = 1; i <= 8; i++) {
-                const cb = document.getElementById('btn-relay' + i);
-                if (cb && cache.relays[i] !== undefined) cb.checked = cache.relays[i];
-            }
-            activeSchedules = Array.isArray(cache.sched) ? cache.sched : [];
-            renderScheduleList();
-            if (cache.chartL.length) {
-                tempChart.data.labels = cache.chartL.slice();
-                tempChart.data.datasets[0].data = cache.chartD.slice();
-                tempChart.update();
-            }
-        }
-
         // ---------- STATUS: koneksi web->server + status ESP32 ----------
         let mqttState = 'connecting';   // connecting | connected | lost
         let espState = null;            // null (belum tahu) | 'online' | 'offline'
@@ -734,6 +703,12 @@
                 st.innerHTML = line;
                 st.style.color = col;
             }
+
+            // Kontrol hanya aktif kalau tersambung DAN ESP32 online (status relay = keadaan sebenarnya)
+            const siap = (mqttState === 'connected' && espState === 'online');
+            document.querySelectorAll('.relay-card, .master-controls').forEach(function (el) {
+                el.classList.toggle('menunggu', !siap);
+            });
         }
 
         // ---------- PESAN MASUK ----------
@@ -748,19 +723,14 @@
                 }
                 else if (topic === T + "suhu") {
                     document.getElementById('ui-temp').innerText = payload + '°';
-                    cache.t = payload;
-                    if (!message.retained) {   // pesan retained = data lama saat baru konek, jangan masuk grafik
+                    // pesan retained = data lama saat baru konek: hanya dipakai kalau grafik masih kosong
+                    if (!message.retained || tempChart.data.labels.length === 0) {
                         const timeNow = new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' });
                         updateChart(timeNow, parseFloat(payload));
-                        cache.chartL = tempChart.data.labels.slice();
-                        cache.chartD = tempChart.data.datasets[0].data.slice();
                     }
-                    saveCache();
                 }
                 else if (topic === T + "kelembapan") {
                     document.getElementById('ui-hum').innerText = payload + '%';
-                    cache.h = payload;
-                    saveCache();
                 }
                 else if (topic === T + "sync_response") {
                     activeSchedules = [];
@@ -779,16 +749,12 @@
                             }
                         });
                     }
-                    cache.sched = activeSchedules.slice();
-                    saveCache();
                     renderScheduleList();
                 }
                 else if (topic.startsWith(T + "state/relay")) {
                     const num = parseInt(topic.slice((T + "state/relay").length));
                     const cb = document.getElementById('btn-relay' + num);
                     if (cb) cb.checked = (payload === "1");
-                    cache.relays[num] = (payload === "1");
-                    saveCache();
                 }
                 else if (topic === T + "alarm_status") {
                     const statusEl = document.getElementById('alarmStatus');
@@ -814,6 +780,7 @@
         let retryTimer = null;
         let retryCount = 0;
         let hiddenAt = 0;
+        let sudahLogin = false;   // beri tahu ESP32 sekali saja per pembukaan halaman
 
         function buildClient() {
             const id = "WebClient_" + Math.random().toString(16).substr(2, 8);   // unik tiap klien
@@ -862,6 +829,10 @@
                         c.subscribe(T + "kelembapan");
                         c.subscribe(T + "sync_response");
                         c.subscribe(T + "alarm_status");
+                        if (!sudahLogin) {            // ESP32 bunyi "tit" sekali tanda ada yang masuk
+                            sudahLogin = true;
+                            kirimRaw(T + "login", "WEB");
+                        }
                     },
                     onFailure: function () {
                         if (c !== client) return;
@@ -1037,8 +1008,7 @@
         }
 
         // ---------- MULAI ----------
-        loadCache();
-        applyCache();
+        try { localStorage.removeItem('fathi_cache_v2'); } catch (e) {}   // bersihkan cache versi lama
         renderStatus();
         MQTTconnect();
     </script>
