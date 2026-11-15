@@ -325,8 +325,8 @@
         #status {
             text-align: center;
             font-size: 0.8rem;
-            color: var(--danger);
-            margin-top: 20px;
+            color: var(--warning);
+            margin: -6px 0 14px 0;
             letter-spacing: 1px;
         }
 
@@ -352,6 +352,7 @@
         <header>
             <!-- Di sini update tag H1 nya -->
             <h1>SYSTEM <span id="system-status-text" style="color: var(--warning); text-shadow: 0 0 10px var(--warning);">CONNECTING...</span></h1>
+            <div id="status">MQTT: CONNECTING... 🟡</div>
             <div class="clock-wrapper">
                 <div class="time-box">
                     <span class="time" id="clock-time">00:00</span>
@@ -588,7 +589,6 @@
             </div>
         </div>
 
-        <div id="status">MQTT: DISCONNECTED 🔴</div>
     </div>
 
     <script>
@@ -664,49 +664,110 @@
             tempChart.update();
         }
 
-       // Ganti port ke jalur aman WSS (biasanya port 8884 atau 8883 untuk HiveMQ WebSocket secure)
+        // ================= MQTT (Tahap 2: sinkron cepat + status ESP32) =================
         const mqttServer = "broker.hivemq.com";
-        const mqttPort = 8884; // Port Secure WebSocket
-        const clientId = "WebClient_" + Math.random().toString(16).substr(2, 8);
+        const mqttPort = 8884; // Secure WebSocket
+        const T = "fathi/kamar/";
 
-        // Tambahkan opsi useSSL: true agar diizinkan oleh browser ber-HTTPS
-        const client = new Paho.MQTT.Client(mqttServer, mqttPort, clientId);
+        let activeSchedules = [];
 
-        client.onConnectionLost = function(responseObject) {
-            document.getElementById('status').innerHTML = "MQTT: DISCONNECTED 🔴";
-            document.getElementById('status').style.color = "var(--danger)";
-            
-            // Logika untuk ubah Header H1 saat Offline
-            let sysStatus = document.getElementById('system-status-text');
-            if (sysStatus) {
-                sysStatus.innerText = "OFFLINE";
-                sysStatus.style.color = "var(--danger)";
-                sysStatus.style.textShadow = "0 0 10px var(--danger)";
-            }
-            
-            setTimeout(MQTTconnect, 5000); 
-        };
+        // ---------- CACHE: halaman langsung berisi data terakhir saat dibuka ----------
+        const CACHE_KEY = "fathi_cache_v2";
+        let cache = { t: null, h: null, relays: {}, sched: [], chartL: [], chartD: [] };
+        let saveTimer = null;
 
-        client.onMessageArrived = function(message) {
+        function loadCache() {
             try {
-                let topic = message.destinationName;
-                let payload = message.payloadString;
-                
-                if (topic === "fathi/kamar/suhu") {
+                const c = JSON.parse(localStorage.getItem(CACHE_KEY));
+                if (c) cache = Object.assign(cache, c);
+            } catch (e) {}
+        }
+        function saveCache() {
+            clearTimeout(saveTimer);
+            saveTimer = setTimeout(function () {
+                try { localStorage.setItem(CACHE_KEY, JSON.stringify(cache)); } catch (e) {}
+            }, 300);
+        }
+        function applyCache() {
+            if (cache.t !== null) document.getElementById('ui-temp').innerText = cache.t + '°';
+            if (cache.h !== null) document.getElementById('ui-hum').innerText = cache.h + '%';
+            for (let i = 1; i <= 8; i++) {
+                const cb = document.getElementById('btn-relay' + i);
+                if (cb && cache.relays[i] !== undefined) cb.checked = cache.relays[i];
+            }
+            activeSchedules = Array.isArray(cache.sched) ? cache.sched : [];
+            renderScheduleList();
+            if (cache.chartL.length) {
+                tempChart.data.labels = cache.chartL.slice();
+                tempChart.data.datasets[0].data = cache.chartD.slice();
+                tempChart.update();
+            }
+        }
+
+        // ---------- STATUS: koneksi web->server + status ESP32 ----------
+        let mqttState = 'connecting';   // connecting | connected | lost
+        let espState = null;            // null (belum tahu) | 'online' | 'offline'
+
+        function renderStatus() {
+            const sys = document.getElementById('system-status-text');
+            const st = document.getElementById('status');
+            let sysTxt, col, line;
+
+            if (mqttState === 'connected') {
+                if (espState === 'online')       { sysTxt = 'ONLINE';      col = '#2ed573'; }
+                else if (espState === 'offline') { sysTxt = 'ESP OFFLINE'; col = 'var(--danger)'; }
+                else                             { sysTxt = 'CONNECTING...'; col = 'var(--warning)'; }
+                line = 'MQTT: CONNECTED 🟢' +
+                    (espState === 'online' ? ' | ESP32: ON 🟢' : espState === 'offline' ? ' | ESP32: OFF 🔴' : ' | ESP32: ... 🟡');
+            } else if (mqttState === 'lost') {
+                sysTxt = 'OFFLINE'; col = 'var(--danger)'; line = 'MQTT: DISCONNECTED 🔴';
+            } else {
+                sysTxt = 'CONNECTING...'; col = 'var(--warning)'; line = 'MQTT: CONNECTING... 🟡';
+            }
+
+            if (sys) {
+                sys.innerText = sysTxt;
+                sys.style.color = col;
+                sys.style.textShadow = '0 0 10px ' + col;
+            }
+            if (st) {
+                st.innerHTML = line;
+                st.style.color = col;
+            }
+        }
+
+        // ---------- PESAN MASUK ----------
+        function onMessage(message) {
+            try {
+                const topic = message.destinationName;
+                const payload = message.payloadString;
+
+                if (topic === T + "status") {
+                    espState = (payload === "online") ? "online" : "offline";
+                    renderStatus();
+                }
+                else if (topic === T + "suhu") {
                     document.getElementById('ui-temp').innerText = payload + '°';
-                    let timeNow = new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' });
-                    updateChart(timeNow, parseFloat(payload));
+                    cache.t = payload;
+                    if (!message.retained) {   // pesan retained = data lama saat baru konek, jangan masuk grafik
+                        const timeNow = new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' });
+                        updateChart(timeNow, parseFloat(payload));
+                        cache.chartL = tempChart.data.labels.slice();
+                        cache.chartD = tempChart.data.datasets[0].data.slice();
+                    }
+                    saveCache();
                 }
-                else if (topic === "fathi/kamar/kelembapan") {
+                else if (topic === T + "kelembapan") {
                     document.getElementById('ui-hum').innerText = payload + '%';
+                    cache.h = payload;
+                    saveCache();
                 }
-                else if (topic === "fathi/kamar/sync_response") {
+                else if (topic === T + "sync_response") {
                     activeSchedules = [];
                     if (payload.startsWith("SYNC:") && payload.length > 5) {
-                        let rawData = payload.substring(5);
-                        let items = rawData.split(";");
-                        items.forEach(item => {
-                            let parts = item.split(",");
+                        const items = payload.substring(5).split(";");
+                        items.forEach(function (item) {
+                            const parts = item.split(",");
                             if (parts.length === 5) {
                                 activeSchedules.push({
                                     id: parseInt(parts[0]),
@@ -718,21 +779,22 @@
                             }
                         });
                     }
+                    cache.sched = activeSchedules.slice();
+                    saveCache();
                     renderScheduleList();
                 }
-                else if (topic.startsWith("fathi/kamar/relay")) {
-                    let num = topic.slice(-1); 
-                    let checkbox = document.getElementById('btn-relay' + num);
-                    if (checkbox) {
-                        checkbox.checked = (payload === "1");
-                    }
+                else if (topic.startsWith(T + "state/relay")) {
+                    const num = parseInt(topic.slice((T + "state/relay").length));
+                    const cb = document.getElementById('btn-relay' + num);
+                    if (cb) cb.checked = (payload === "1");
+                    cache.relays[num] = (payload === "1");
+                    saveCache();
                 }
-                // --- Tangkap Status Alarm dari ESP32 ---
-                else if (topic === "fathi/kamar/alarm_status") {
-                    let statusEl = document.getElementById('alarmStatus');
+                else if (topic === T + "alarm_status") {
+                    const statusEl = document.getElementById('alarmStatus');
                     if (statusEl) {
                         statusEl.innerText = "Status: " + payload;
-                        if(payload.includes("BUNYI")) {
+                        if (payload.includes("BUNYI")) {
                             statusEl.style.color = "var(--danger)";
                             statusEl.style.fontWeight = "bold";
                         } else {
@@ -742,114 +804,167 @@
                     }
                 }
             } catch (err) {
-                console.error("Aman, koneksi ga putus! Tapi ada error JS: ", err);
+                console.error("Error JS (koneksi tetap aman): ", err);
             }
-        };
+        }
+
+        // ---------- KONEKSI: satu jalur, reconnect cepat ----------
+        let client = null;
+        let connecting = false;
+        let retryTimer = null;
+        let retryCount = 0;
+        let hiddenAt = 0;
+
+        function buildClient() {
+            const id = "WebClient_" + Math.random().toString(16).substr(2, 8);   // unik tiap klien
+            const c = new Paho.MQTT.Client(mqttServer, mqttPort, id);
+            c.onMessageArrived = onMessage;
+            c.onConnectionLost = function () {
+                if (c !== client) return;   // klien lama diabaikan
+                connecting = false;
+                mqttState = 'lost';
+                espState = null;
+                renderStatus();
+                scheduleReconnect(300);
+            };
+            return c;
+        }
+
+        function scheduleReconnect(ms) {
+            clearTimeout(retryTimer);
+            retryTimer = setTimeout(MQTTconnect, ms);
+        }
 
         function MQTTconnect() {
-            document.getElementById('status').innerHTML = "MQTT: CONNECTING... 🟡";
-            document.getElementById('status').style.color = "var(--warning)";
-            
-            // Logika untuk ubah Header H1 saat Loading/Connecting
-            let sysStatus = document.getElementById('system-status-text');
-            if (sysStatus) {
-                sysStatus.innerText = "CONNECTING...";
-                sysStatus.style.color = "var(--warning)";
-                sysStatus.style.textShadow = "0 0 10px var(--warning)";
+            if (connecting) return;
+            connecting = true;
+            mqttState = 'connecting';
+            espState = null;
+            renderStatus();
+
+            client = buildClient();
+            const c = client;
+            try {
+                c.connect({
+                    useSSL: true,
+                    keepAliveInterval: 20,
+                    timeout: 6,
+                    onSuccess: function () {
+                        if (c !== client) { try { c.disconnect(); } catch (e) {} return; }
+                        connecting = false;
+                        retryCount = 0;
+                        mqttState = 'connected';
+                        renderStatus();
+                        // Semua ini retained di broker: data langsung datang begitu subscribe
+                        c.subscribe(T + "status");
+                        c.subscribe(T + "state/#");
+                        c.subscribe(T + "suhu");
+                        c.subscribe(T + "kelembapan");
+                        c.subscribe(T + "sync_response");
+                        c.subscribe(T + "alarm_status");
+                    },
+                    onFailure: function () {
+                        if (c !== client) return;
+                        connecting = false;
+                        mqttState = 'lost';
+                        renderStatus();
+                        retryCount++;
+                        scheduleReconnect(Math.min(500 * retryCount, 5000));
+                    }
+                });
+            } catch (e) {
+                connecting = false;
+                retryCount++;
+                scheduleReconnect(1000);
             }
-            
-            client.connect({
-                useSSL: true,
-                keepAliveInterval: 30, // Nafas panjang
-                onSuccess: function() {
-                    document.getElementById('status').innerHTML = "MQTT: CONNECTED 🟢";
-                    document.getElementById('status').style.color = "#2ed573";
-                    
-                    // Logika untuk ubah Header H1 saat Berhasil Online
-                    let sysStatus = document.getElementById('system-status-text');
-                    if (sysStatus) {
-                        sysStatus.innerText = "ONLINE";
-                        sysStatus.style.color = "#2ed573";
-                        sysStatus.style.textShadow = "0 0 10px #2ed573";
-                    }
-                    
-                    client.subscribe("fathi/kamar/suhu");
-                    client.subscribe("fathi/kamar/kelembapan");
-                    client.subscribe("fathi/kamar/sync_response"); 
-                    client.subscribe("fathi/kamar/alarm_status"); // Listen status alarm
-                    client.subscribe("fathi/kamar/sync_time"); 
-                    
-                    for (let i = 1; i <= 8; i++) {
-                        client.subscribe("fathi/kamar/relay" + i);
-                    }
-                    
-                    setTimeout(function() {
-                        let syncMsg = new Paho.MQTT.Message("GET_SYNC");
-                        syncMsg.destinationName = "fathi/kamar/timer";
-                        client.send(syncMsg);
-                    }, 2000);
-                },
-                onFailure: function() {
-                    setTimeout(MQTTconnect, 5000);
-                }
-            });
+        }
+
+        // Putus paksa lalu sambung ulang sekarang juga
+        function hardReconnect() {
+            clearTimeout(retryTimer);
+            const old = client;
+            if (old) {
+                old.onConnectionLost = null;
+                old.onMessageArrived = function () {};
+                try { old.disconnect(); } catch (e) {}
+            }
+            client = null;
+            connecting = false;
+            retryCount = 0;
+            MQTTconnect();
+        }
+
+        // Browser HP mematikan koneksi saat tab disembunyikan: begitu kembali, langsung sambung ulang
+        document.addEventListener('visibilitychange', function () {
+            if (document.hidden) { hiddenAt = Date.now(); return; }
+            if (!client || !client.isConnected() || Date.now() - hiddenAt > 8000) hardReconnect();
+        });
+        window.addEventListener('pageshow', function (e) { if (e.persisted) hardReconnect(); });
+        window.addEventListener('online', hardReconnect);
+        window.addEventListener('offline', function () { mqttState = 'lost'; espState = null; renderStatus(); });
+
+        // ---------- KIRIM PERINTAH ----------
+        function siapKirim() {
+            if (!client || !client.isConnected()) {
+                alert("Belum tersambung ke server. Tunggu sampai status ONLINE.");
+                return false;
+            }
+            if (espState === 'offline') {
+                alert("ESP32 sedang OFFLINE, perintah tidak akan sampai.");
+                return false;
+            }
+            return true;
+        }
+        function kirimRaw(topic, payload) {
+            const m = new Paho.MQTT.Message(payload);
+            m.destinationName = topic;
+            client.send(m);
+        }
+        function kirim(topic, payload) {
+            if (!siapKirim()) return false;
+            kirimRaw(topic, payload);
+            return true;
         }
 
         function toggleRelay(relayNumber) {
-            let checkbox = document.getElementById('btn-relay' + relayNumber);
-            let payload = checkbox.checked ? "1" : "0";
-            let topic = "fathi/kamar/relay" + relayNumber;
-
-            let message = new Paho.MQTT.Message(payload);
-            message.destinationName = topic;
-            client.send(message);
+            const cb = document.getElementById('btn-relay' + relayNumber);
+            if (!kirim(T + "cmd/relay" + relayNumber, cb.checked ? "1" : "0")) cb.checked = !cb.checked;
         }
-        
-        // --- FUNGSI MASTER RELAY UPDATE (KECUALI TERAS) ---
+
+        // --- MASTER RELAY (KECUALI TERAS) ---
         function setAllRelays(state, excludeTeras) {
+            if (!siapKirim()) return;
             for (let i = 1; i <= 8; i++) {
-                // Lewati Relay 4 (Lampu Teras) jika tombol ditekan, baik saat ON maupun OFF
-                if (excludeTeras && i === 4) {
-                    continue; 
-                }
-                
-                let checkbox = document.getElementById('btn-relay' + i);
-                if (checkbox) checkbox.checked = (state === "1");
-                let topic = "fathi/kamar/relay" + i;
-                let message = new Paho.MQTT.Message(state);
-                message.destinationName = topic;
-                client.send(message);
+                if (excludeTeras && i === 4) continue;   // Relay 4 = Lampu Teras
+                const cb = document.getElementById('btn-relay' + i);
+                if (cb) cb.checked = (state === "1");
+                kirimRaw(T + "cmd/relay" + i, state);
             }
         }
 
-        // --- FUNGSI SINKRONISASI JAM VIA MQTT ---
+        // --- SINKRONISASI JAM VIA MQTT ---
         function sinkronkanJam() {
-            let message = new Paho.MQTT.Message("SYNC_NOW");
-            message.destinationName = "fathi/kamar/sync_time";
-            client.send(message);
+            kirim(T + "sync_time", "SYNC_NOW");
         }
 
-        // --- FUNGSI ALARM / BUZZER ---
+        // --- ALARM / BUZZER ---
         function kirimAlarm(tipe) {
             let payload = "";
             if (tipe === 'TIMER') {
-                let mnt = document.getElementById('inputMenit').value;
-                if(!mnt) { alert("Masukkan menit dulu!"); return; }
+                const mnt = document.getElementById('inputMenit').value;
+                if (!mnt) { alert("Masukkan menit dulu!"); return; }
                 payload = "TIMER:" + mnt;
             } else if (tipe === 'ALARM') {
-                let jam = document.getElementById('inputJamAlarm').value;
-                if(!jam) { alert("Masukkan jam dulu!"); return; }
+                const jam = document.getElementById('inputJamAlarm').value;
+                if (!jam) { alert("Masukkan jam dulu!"); return; }
                 payload = "ALARM:" + jam;
             } else if (tipe === 'STOP') {
                 payload = "STOP";
             }
-            
-            let message = new Paho.MQTT.Message(payload);
-            message.destinationName = "fathi/kamar/alarm";
-            client.send(message);
+            kirim(T + "alarm", payload);
         }
 
-        // --- MANAJEMEN MODAL & TASK LIST JADWAL ---
+        // --- MODAL & TASK LIST JADWAL ---
         function bukaMenuTimer() {
             document.getElementById('modalTimer').style.display = 'flex';
         }
@@ -857,8 +972,6 @@
         function tutupMenuTimer() {
             document.getElementById('modalTimer').style.display = 'none';
         }
-
-        let activeSchedules = [];
 
         function kirimTimer(tipe) {
             let alat, aksi, jam;
@@ -878,29 +991,23 @@
                 return;
             }
 
-            let uniqueId = Date.now();
-            let payloadTimer = "ADD:" + alat + "_" + aksi + "_" + jam + "_" + tipe + "_" + uniqueId;
-            
-            let message = new Paho.MQTT.Message(payloadTimer);
-            message.destinationName = "fathi/kamar/timer";
-            client.send(message);
+            const uniqueId = Date.now();
+            const payloadTimer = "ADD:" + alat + "_" + aksi + "_" + jam + "_" + tipe + "_" + uniqueId;
+            if (!kirim(T + "timer", payloadTimer)) return;
 
-            activeSchedules.push({ id: uniqueId, alat, aksi, jam, tipe });
+            // Tampil dulu; ESP32 selalu membalas daftar aslinya, jadi kalau ditolak akan terkoreksi sendiri
+            activeSchedules.push({ id: uniqueId, alat: alat, aksi: aksi, jam: jam, tipe: tipe });
             renderScheduleList();
         }
 
         function hapusTask(idUnik) {
-            let payloadHapus = "DEL:" + idUnik;
-            let message = new Paho.MQTT.Message(payloadHapus);
-            message.destinationName = "fathi/kamar/timer";
-            client.send(message);
-
-            activeSchedules = activeSchedules.filter(item => item.id !== idUnik);
+            if (!kirim(T + "timer", "DEL:" + idUnik)) return;
+            activeSchedules = activeSchedules.filter(function (item) { return item.id !== idUnik; });
             renderScheduleList();
         }
 
         function renderScheduleList() {
-            let container = document.getElementById('scheduleContainer');
+            const container = document.getElementById('scheduleContainer');
             if (!container) return;
 
             if (activeSchedules.length === 0) {
@@ -908,20 +1015,16 @@
                 return;
             }
 
+            const nama = {
+                R1: "Kipas", R2: "Exhaust", R3: "Lampu Utama", R4: "Lampu Teras",
+                R5: "LED Kompor", R6: "LED Meja Belajar", R7: "AUX Port 1", R8: "AUX Port 2"
+            };
+
             let html = `<h4 style="color: #0ff; font-family: 'Orbitron'; font-size: 0.85rem; margin-top: 10px; margin-bottom: 5px;">ACTIVE SCHEDULES LIST:</h4>`;
             html += `<div style="max-height: 110px; overflow-y: auto;">`;
-            
-            activeSchedules.forEach(item => {
-                let namaAlat = item.alat;
-                if(item.alat === "R1") namaAlat = "Kipas";
-                if(item.alat === "R2") namaAlat = "Exhaust";
-                if(item.alat === "R3") namaAlat = "Lampu Utama";
-                if(item.alat === "R4") namaAlat = "Lampu Teras";
-                if(item.alat === "R5") namaAlat = "LED Kompor";
-                if(item.alat === "R6") namaAlat = "LED Meja Belajar";
-                if(item.alat === "R7") namaAlat = "AUX Port 1";
-                if(item.alat === "R8") namaAlat = "AUX Port 2";
 
+            activeSchedules.forEach(function (item) {
+                const namaAlat = nama[item.alat] || item.alat;
                 html += `
                     <div style="display: flex; justify-content: space-between; align-items: center; background: rgba(0,243,255,0.05); border: 1px solid rgba(0,243,255,0.2); padding: 4px 8px; margin-bottom: 4px; border-radius: 4px;">
                         <span style="font-size: 0.75rem; color: #fff;">[${item.tipe}] ${namaAlat} - ${item.aksi} @ ${item.jam}</span>
@@ -933,6 +1036,10 @@
             container.innerHTML = html;
         }
 
+        // ---------- MULAI ----------
+        loadCache();
+        applyCache();
+        renderStatus();
         MQTTconnect();
     </script>
 </body>
